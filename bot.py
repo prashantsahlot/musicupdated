@@ -9,20 +9,28 @@ from urllib.error import HTTPError
 from urllib3.exceptions import MaxRetryError
 
 # --- Configuration ---
-TOKEN = '6459647682:AAHaDcMlNKfoc2jNQ1j-tVYMdEYvyHM0Gws'  # Your bot token
+TOKEN = '6459647682:AAHaDcMlNKfoc2jNQ1j-tVYMdEYvyHM0Gws'
 YOUTUBE_API_KEY = 'AIzaSyATjDFifmrmn5vwTRLVcLtNM3q_9_kJ6yk'
 START_IMAGE_LINK = 'https://telegra.ph/file/82e3f9434e48d348fa223.jpg'
-DOWNLOAD_DIRECTORY = 'downloads'  # Directory to save downloads
+DOWNLOAD_DIRECTORY = 'downloads'
 MAX_VIDEO_SIZE = 50 * 1024 * 1024  # 50MB
 
 # --- Logging ---
-# ... (Your logging configuration remains the same)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # --- Bot Initialization ---
-# ... (Your bot initialization remains the same)
+bot = telebot.TeleBot(TOKEN, parse_mode=None)
+start_time = time.time()
 
 # --- Start Menu Text ---
-# ... (Your START_MENU_TEXT remains the same)
+START_MENU_TEXT = (
+    "Hello! I'm a YouTube downloader bot. Use these commands:\n\n"
+    "🎵 /audio <YouTube link> : Download audio\n"
+    "🎥 /video <YouTube link> : Download video\n"
+    "🔍 /search <query> : Search for YouTube videos\n"
+    "🏓 /ping : Check my status"
+)
 
 # --- Helper Functions ---
 # ... (get_uptime, search_youtube, send_animated_message remain the same)
@@ -91,7 +99,7 @@ def handle_download(message):
 if __name__ == '__main__':
     try:
         # Create download directory if it doesn't exist
-        os.makedirs(DOWNLOAD_DIRECTORY, exist_ok=True)  # Corrected line
+        os.makedirs(DOWNLOAD_DIRECTORY, exist_ok=True)  # Add the closing parenthesis here
 
         logger.info("Bot is starting...")
         bot.infinity_polling(skip_pending=True, timeout=10)
