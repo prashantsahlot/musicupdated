@@ -33,39 +33,22 @@ START_MENU_TEXT = (
 )
 
 # --- Helper Functions ---
-def get_uptime():
-    current_time = time.time()
-    uptime_seconds = int(current_time - start_time)
-    uptime_minutes = uptime_seconds // 60
-    uptime_seconds %= 60
-    return f"{uptime_minutes} minutes, {uptime_seconds} seconds"
-
-def search_youtube(query):
-    # ... (Your existing search_youtube function)
+# ... (Your get_uptime and search_youtube functions)
 
 # --- Download with Retries ---
 def download_with_retries(stream, file_path):
     for attempt in range(MAX_DOWNLOAD_RETRIES):
         try:
             stream.download(output_path=DOWNLOAD_DIRECTORY, filename=file_path)
-            return True
+            return True  # Download successful
         except (HTTPError, MaxRetryError) as e:
             logger.warning(f"Download attempt {attempt + 1} failed: {e}")
-            time.sleep(2)
-    return False
+            time.sleep(2)  # Wait before retrying
+    return False  # All retries failed
+
 
 # --- Message Handlers ---
-@bot.message_handler(commands=['start', 'help'])
-def send_welcome(message):
-    bot.send_photo(message.chat.id, START_IMAGE_LINK, caption=START_MENU_TEXT)
-
-@bot.message_handler(commands=['ping'])
-def ping_command(message):
-    # ... (Your existing ping_command function)
-
-@bot.message_handler(commands=['search'])
-def search(message):
-    # ... (Your existing search function)
+# ... (Your send_welcome, ping_command, and search handlers)
 
 @bot.message_handler(commands=['audio', 'video'])
 def handle_download(message):
@@ -86,13 +69,21 @@ def handle_download(message):
         if not stream:
             bot.reply_to(message, "❌ No suitable stream found.")
             return
-       
+
         file_name = stream.default_filename
         file_path = os.path.join(DOWNLOAD_DIRECTORY, file_name)
 
         # Download with retries
         if download_with_retries(stream, file_name):
-            # ... (Logic for sending the downloaded file)
+            # Send video/audio
+            with open(file_path, 'rb') as file:
+                bot.send_chat_action(message.chat.id, 'upload_video' if not is_audio else 'upload_audio')
+                if is_audio:
+                    bot.send_audio(message.chat.id, file, caption=yt.title)
+                else:
+                    bot.send_video(message.chat.id, file)
+            os.remove(file_path)  # Remove the file after sending
+
         else:
             handle_download_error(message, "downloading", "Maximum download retries exceeded.")
 
@@ -102,14 +93,9 @@ def handle_download(message):
         handle_download_error(message, "downloading", str(e))
 
 
-
 # --- Error Handling ---
-def handle_download_error(message, error_type, details=""):
-    error_message = f"❌ An error occurred while {error_type}. Please try again later."
-    if details:
-        error_message += f"\nDetails: {details}"
-    bot.reply_to(message, error_message)
-    logger.error(error_message)
+# ... (Your handle_download_error function)
+
 
 # --- Main ---
 if __name__ == '__main__':
