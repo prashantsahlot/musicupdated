@@ -9,7 +9,7 @@ from urllib.error import HTTPError
 from urllib3.exceptions import MaxRetryError
 
 # --- Configuration ---
-TOKEN = '6459647682:AAHaDcMlNKfoc2jNQ1j-tVYMdEYvyHM0Gws'
+TOKEN = '6459647682:AAFmuOlwiUCWhDz1X6-6p6QG9u-YH6qexZ8'
 YOUTUBE_API_KEY = 'AIzaSyATjDFifmrmn5vwTRLVcLtNM3q_9_kJ6yk'
 START_IMAGE_LINK = 'https://telegra.ph/file/82e3f9434e48d348fa223.jpg'
 DOWNLOAD_DIRECTORY = 'downloads'
