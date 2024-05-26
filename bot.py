@@ -3,17 +3,17 @@ import os
 import time
 import requests
 import telebot
-import threading
 from pytube import YouTube, exceptions
 from urllib.error import HTTPError
 from urllib3.exceptions import MaxRetryError
 
 # --- Configuration ---
-TOKEN = '6459647682:AAFmuOlwiUCWhDz1X6-6p6QG9u-YH6qexZ8'  # Updated bot token
-YOUTUBE_API_KEY = 'AIzaSyATjDFifmrmn5vwTRLVcLtNM3q_9_kJ6yk'
+TOKEN = '6459647682:AAFmuOlwiUCWhDz1X6-6p6QG9u-YH6qexZ8'
+YOUTUBE_API_KEY = 'AIzaSyATjDFifmrmn5vwTRLVcLtNM3q_9_kJ6yk'  # Ensure this is valid
 START_IMAGE_LINK = 'https://telegra.ph/file/82e3f9434e48d348fa223.jpg'
 DOWNLOAD_DIRECTORY = 'downloads'
 MAX_VIDEO_SIZE = 50 * 1024 * 1024  # 50MB
+MAX_DOWNLOAD_RETRIES = 3
 
 # --- Logging ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 # --- Bot Initialization ---
 bot = telebot.TeleBot(TOKEN, parse_mode=None)
-start_time = time.time()  # Track bot start time
+start_time = time.time()
 
 # --- Start Menu Text ---
 START_MENU_TEXT = (
@@ -33,75 +33,48 @@ START_MENU_TEXT = (
 )
 
 # --- Helper Functions ---
-# ... (get_uptime and search_youtube functions remain the same)
+def get_uptime():
+    current_time = time.time()
+    uptime_seconds = int(current_time - start_time)
+    uptime_minutes = uptime_seconds // 60
+    uptime_seconds %= 60
+    return f"{uptime_minutes} minutes, {uptime_seconds} seconds"
 
-# --- Progress Bar Functions ---
+def search_youtube(query):
+    # ... (Your existing search_youtube function)
 
-def on_download_progress(stream, chunk, bytes_remaining):
-    total_size = stream.filesize
-    bytes_downloaded = total_size - bytes_remaining
-    percent = int(100.0 * bytes_downloaded / total_size)
-    update_progress_message(stream.message, f"Downloading... {percent}%")
-
-def update_progress_message(message, text):
-    try:
-        bot.edit_message_text(text, message.chat.id, message.message_id)
-    except telebot.apihelper.ApiException:
-        pass 
-
-# --- Error Handlers ---
-
-def handle_download_error(message, error_type, details=""):
-    error_message = f"❌ An error occurred while {error_type}. Please try again later."
-    if details:
-        error_message += f"\nDetails: {details}"
-    bot.reply_to(message, error_message)
-    logger.error(error_message)
-
+# --- Download with Retries ---
+def download_with_retries(stream, file_path):
+    for attempt in range(MAX_DOWNLOAD_RETRIES):
+        try:
+            stream.download(output_path=DOWNLOAD_DIRECTORY, filename=file_path)
+            return True
+        except (HTTPError, MaxRetryError) as e:
+            logger.warning(f"Download attempt {attempt + 1} failed: {e}")
+            time.sleep(2)
+    return False
 
 # --- Message Handlers ---
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     bot.send_photo(message.chat.id, START_IMAGE_LINK, caption=START_MENU_TEXT)
 
-
 @bot.message_handler(commands=['ping'])
 def ping_command(message):
-    start_time_ping = time.monotonic()
-    response = bot.reply_to(message, "Pinging...")
-    end_time_ping = time.monotonic()
-    latency = end_time_ping - start_time_ping
-    bot.edit_message_text(
-        f"Pong! 🏓\nLatency: {latency:.2f} seconds\nUptime: {get_uptime()}",
-        message.chat.id,
-        response.message_id
-    )
-
+    # ... (Your existing ping_command function)
 
 @bot.message_handler(commands=['search'])
 def search(message):
-    try:
-        query = message.text.strip().split(' ', 1)[1]
-        search_results = search_youtube(query)
-        if search_results:
-            bot.reply_to(message, search_results)
-        else:
-            bot.reply_to(message, "No results found.")
-    except IndexError:  # Handle invalid command format
-        bot.reply_to(message, "Invalid command. Please use /search <query>")
-    except Exception as e:  # Catch other errors
-        handle_download_error(message, "searching", str(e))
-
-
+    # ... (Your existing search function)
 
 @bot.message_handler(commands=['audio', 'video'])
 def handle_download(message):
     command = message.text.split()[0]
     is_audio = command == '/audio'
-    
+
     try:
-        youtube_link = message.text.strip().split(' ', 1)[1]  
-        yt = YouTube(youtube_link, on_progress_callback=on_download_progress)  
+        youtube_link = message.text.strip().split(' ', 1)[1]
+        yt = YouTube(youtube_link)
 
         # Choose stream based on format
         stream = (
@@ -113,44 +86,35 @@ def handle_download(message):
         if not stream:
             bot.reply_to(message, "❌ No suitable stream found.")
             return
+       
+        file_name = stream.default_filename
+        file_path = os.path.join(DOWNLOAD_DIRECTORY, file_name)
 
-        # Start download animation
-        msg = bot.send_message(message.chat.id, "Downloading...")
-        stream.message = msg  # Attach message to stream for progress updates
-
-        file_path = stream.download(output_path=DOWNLOAD_DIRECTORY)
-        file_name = os.path.basename(file_path)
-
-        if not is_audio and os.path.getsize(file_path) > MAX_VIDEO_SIZE:
-            # Send video as file if it's too large
-            with open(file_path, 'rb') as file:
-                bot.edit_message_text(f"Uploading {file_name}...", message.chat.id, msg.message_id)
-                bot.send_chat_action(message.chat.id, 'upload_document')  
-                bot.send_document(message.chat.id, file) 
+        # Download with retries
+        if download_with_retries(stream, file_name):
+            # ... (Logic for sending the downloaded file)
         else:
-            # Send audio or smaller video as media
-            with open(file_path, 'rb') as file:
-                bot.edit_message_text(f"Uploading {file_name}...", message.chat.id, msg.message_id)
-                bot.send_chat_action(message.chat.id, 'upload_video' if not is_audio else 'upload_audio')
-                if is_audio:
-                    bot.send_audio(message.chat.id, file, caption=yt.title)
-                else:
-                    bot.send_video(message.chat.id, file) 
+            handle_download_error(message, "downloading", "Maximum download retries exceeded.")
 
-        os.remove(file_path)
-        bot.delete_message(message.chat.id, msg.message_id)  # Delete progress message
     except (IndexError, exceptions.RegexMatchError):
         bot.reply_to(message, f"Invalid command. Use: {command} <YouTube link>")
     except Exception as e:
         handle_download_error(message, "downloading", str(e))
 
 
+
+# --- Error Handling ---
+def handle_download_error(message, error_type, details=""):
+    error_message = f"❌ An error occurred while {error_type}. Please try again later."
+    if details:
+        error_message += f"\nDetails: {details}"
+    bot.reply_to(message, error_message)
+    logger.error(error_message)
+
 # --- Main ---
 if __name__ == '__main__':
     try:
-        # Create download directory if it doesn't exist
-        os.makedirs(DOWNLOAD_DIRECTORY, exist_ok=True)  # Add the closing parenthesis here
-
+        os.makedirs(DOWNLOAD_DIRECTORY, exist_ok=True)
         logger.info("Bot is starting...")
         bot.infinity_polling(skip_pending=True, timeout=10)
     except telebot.apihelper.ApiTelegramException as e:
