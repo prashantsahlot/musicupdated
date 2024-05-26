@@ -1,1 +1,1 @@
-worker: python import telebot.py 
+worker: python bot.py  # Or python main.py
