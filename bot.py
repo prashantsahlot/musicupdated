@@ -5,12 +5,15 @@ import requests
 import telebot
 import threading
 from pytube import YouTube, exceptions
+from urllib.error import HTTPError
+from urllib3.exceptions import MaxRetryError
 
 # --- Configuration ---
 TOKEN = '6459647682:AAHaDcMlNKfoc2jNQ1j-tVYMdEYvyHM0Gws'  # Your bot token
 YOUTUBE_API_KEY = 'AIzaSyATjDFifmrmn5vwTRLVcLtNM3q_9_kJ6yk'
 START_IMAGE_LINK = 'https://telegra.ph/file/82e3f9434e48d348fa223.jpg'
 DOWNLOAD_DIRECTORY = 'downloads'  # Directory to save downloads
+MAX_VIDEO_SIZE = 50 * 1024 * 1024  # 50MB
 
 # --- Logging ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -36,7 +39,6 @@ def get_uptime():
     uptime = current_time - start_time
     uptime_str = time.strftime("%jd %Hh %Mm %Ss", time.gmtime(uptime))
     return uptime_str
-
 
 def search_youtube(query):
     try:
@@ -94,6 +96,7 @@ def handle_download_error(message, error_type, details=""):
 def send_welcome(message):
     bot.send_photo(message.chat.id, START_IMAGE_LINK, caption=START_MENU_TEXT)
 
+
 @bot.message_handler(commands=['ping'])
 def ping_command(message):
     start_time_ping = time.monotonic()
@@ -127,6 +130,7 @@ def search(message):
 def handle_download(message):
     command = message.text.split()[0]
     is_audio = command == '/audio'
+    
     try:
         youtube_link = message.text.strip().split(' ', 1)[1]  
         yt = YouTube(youtube_link, on_progress_callback=on_download_progress)  
@@ -149,13 +153,22 @@ def handle_download(message):
         file_path = stream.download(output_path=DOWNLOAD_DIRECTORY)
         file_name = os.path.basename(file_path)
 
-        with open(file_path, 'rb') as file:
-            bot.edit_message_text(f"Uploading {file_name}...", message.chat.id, msg.message_id)
-            bot.send_chat_action(message.chat.id, 'upload_video' if not is_audio else 'upload_audio')
-            if is_audio:
-                bot.send_audio(message.chat.id, file, caption=yt.title)
-            else:
-                bot.send_video(message.chat.id, file) 
+        if not is_audio and os.path.getsize(file_path) > MAX_VIDEO_SIZE:
+            # Send video as file if it's too large
+            with open(file_path, 'rb') as file:
+                bot.edit_message_text(f"Uploading {file_name}...", message.chat.id, msg.message_id)
+                bot.send_chat_action(message.chat.id, 'upload_document')  
+                bot.send_document(message.chat.id, file) 
+        else:
+            # Send audio or smaller video as media
+            with open(file_path, 'rb') as file:
+                bot.edit_message_text(f"Uploading {file_name}...", message.chat.id, msg.message_id)
+                bot.send_chat_action(message.chat.id, 'upload_video' if not is_audio else 'upload_audio')
+                if is_audio:
+                    bot.send_audio(message.chat.id, file, caption=yt.title)
+                else:
+                    bot.send_video(message.chat.id, file) 
+
         os.remove(file_path)
         bot.delete_message(message.chat.id, msg.message_id)  # Delete progress message
     except (IndexError, exceptions.RegexMatchError):
@@ -168,14 +181,4 @@ def handle_download(message):
 if __name__ == '__main__':
     try:
         # Create download directory if it doesn't exist
-        os.makedirs(DOWNLOAD_DIRECTORY, exist_ok=True)
-
-        logger.info("Bot is starting...")
-        bot.infinity_polling(skip_pending=True, timeout=10)
-    except telebot.apihelper.ApiTelegramException as e:
-        if e.error_code == 409:
-            logger.error("Conflict: Another instance of the bot is running. Please stop it before starting this one.")
-        else:
-            logger.error(f"Telegram API Error: {e}")
-    except Exception as e:
-        logger.error(f"An unexpected error occurred: {e}")
+        os.makedirs(DOWNLOAD_
